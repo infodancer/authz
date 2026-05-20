@@ -3,5 +3,7 @@ package sqlite
 
 import "embed"
 
+// FS holds the embedded SQLite migration files.
+//
 //go:embed *.sql
 var FS embed.FS

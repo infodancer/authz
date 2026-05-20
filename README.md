@@ -104,3 +104,7 @@ before any UI exists.
 - [DESIGN.md](DESIGN.md) — full architecture rationale
 - [infodancer/oidclient](https://github.com/infodancer/oidclient) — the auth-N
   side of the same toolchain
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).

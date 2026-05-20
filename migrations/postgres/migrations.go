@@ -3,5 +3,7 @@ package postgres
 
 import "embed"
 
+// FS holds the embedded PostgreSQL migration files.
+//
 //go:embed *.sql
 var FS embed.FS

@@ -135,7 +135,7 @@ func (s *dbStore) Roles(ctx context.Context, issuer, subject, module string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("authz: query roles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []string
 	for rows.Next() {
@@ -177,7 +177,7 @@ func (s *dbStore) Holders(ctx context.Context, role string) ([]Holding, bool, er
 	if err != nil {
 		return nil, false, fmt.Errorf("authz: query holders: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []Holding
 	for rows.Next() {

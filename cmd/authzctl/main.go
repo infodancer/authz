@@ -139,13 +139,13 @@ func run(driver, dsn, cmd string, args []string) error {
 			return err
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-		fmt.Fprintln(w, "ISSUER\tSUBJECT\tMODULE\tGRANTED_AT\tGRANTED_BY")
+		_, _ = fmt.Fprintln(w, "ISSUER\tSUBJECT\tMODULE\tGRANTED_AT\tGRANTED_BY")
 		for _, h := range holdings {
 			module := h.Module
 			if module == "" {
 				module = "(global)"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 				h.Issuer, h.Subject, module, h.GrantedAt.Format("2006-01-02T15:04:05Z07:00"), h.GrantedBy)
 		}
 		_ = w.Flush()
