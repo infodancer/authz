@@ -69,10 +69,12 @@ collide with the host application's migration history.
 ```go
 import "github.com/infodancer/authz"
 
-store := authz.NewPostgresStore(pool)
+// db is a *sql.DB opened with any PostgreSQL driver. A pgxpool host
+// can wrap its pool with stdlib.OpenDBFromPool(pool).
 if err := authz.MigratePostgres(ctx, db); err != nil {
     return err
 }
+store := authz.NewPostgresStore(db)
 
 resolver := &authz.Resolver{
     Source: oidc,           // anything implementing IdentitySource

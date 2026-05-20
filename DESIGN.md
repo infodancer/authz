@@ -114,10 +114,14 @@ type Grant struct {
     GrantedBy string
 }
 
-type Principal struct {
-    Issuer, Subject string
-    DisplayName, Email string
-    Roles []string
+// Holding is one row of the role table, returned by Holders for audit
+// and the authzctl holders command. (Principal — see §6 — is the
+// resolved-identity type and carries display data the store doesn't
+// hold, so Holders returns Holding, not Principal.)
+type Holding struct {
+    Issuer, Subject, Module, Role string
+    GrantedAt time.Time
+    GrantedBy string
 }
 
 type Store interface {
@@ -125,23 +129,40 @@ type Store interface {
     // module IN ('', requested). Result is deduplicated and sorted.
     Roles(ctx context.Context, issuer, subject, module string) ([]string, error)
 
-    // Grant inserts a role assignment. Idempotent on the PK.
+    // Grant inserts a role assignment. Idempotent on the PK
+    // (ON CONFLICT DO NOTHING), preserving the original granted_at.
     Grant(ctx context.Context, g Grant) error
 
     // Revoke removes a specific (issuer, subject, module, role) tuple.
     // Hard delete. No-op if the tuple doesn't exist.
     Revoke(ctx context.Context, issuer, subject, module, role string) error
 
-    // Holders lists every (issuer, subject) holding role in any module.
-    // Returns up to holdersMaxRows rows (10k); callers that hit the cap
-    // get a non-nil cap-hit signal so the CLI can warn.
-    Holders(ctx context.Context, role string) ([]Principal, error)
+    // Holders lists every grant of role across all modules. Returns up
+    // to 10k rows; capped reports whether more existed than were
+    // returned so the CLI can warn.
+    Holders(ctx context.Context, role string) (holdings []Holding, capped bool, err error)
 }
 ```
 
-Postgres and SQLite implementations live alongside in the same module
-(`postgres.go`, `sqlite.go`). Both pass `store_test.go`'s table-driven
-test set.
+Both implementations live behind one `dbStore` on `database/sql`,
+differing only by a dialect (placeholder syntax). Constructors:
+
+```go
+func NewPostgresStore(db *sql.DB) Store
+func NewSQLiteStore(db *sql.DB) Store
+```
+
+authz imports **no** PostgreSQL driver in library code — the caller
+opens the `*sql.DB` with their own driver (pgx stdlib, lib/pq, ...).
+A pgxpool-based host wraps its pool in one line:
+
+```go
+sqlDB := stdlib.OpenDBFromPool(pool)   // shares the same underlying pool
+store := authz.NewPostgresStore(sqlDB)
+```
+
+Both backends pass `store_test.go`'s table-driven test set (SQLite on a
+temp file, PostgreSQL on testcontainers).
 
 ## 6. The Resolver
 
@@ -259,7 +280,7 @@ The new shape:
 // faq calling code
 resolver := &authz.Resolver{
     Source: hostOIDCAdapter,
-    Store:  authz.NewPostgresStore(pool),
+    Store:  authz.NewPostgresStore(stdlib.OpenDBFromPool(pool)),
     Module: "faq",
 }
 
