@@ -28,10 +28,10 @@ JWT claims, federated or otherwise.
                   email, name)              in local store
 ```
 
-- **Identity** is whatever the host's auth-N layer produces. authz
-  takes an `IdentitySource` interface, so any auth scheme that can
-  produce `(issuer, subject, email, name)` from an `*http.Request` will
-  do — OIDC, mTLS, API keys, future protocols.
+- **Identity** is whatever the host's auth-N layer produces. The host
+  validates the request and constructs an `authz.Identity`
+  `(issuer, subject, email, name)` — from OIDC, mTLS, API keys, any
+  scheme. authz never sees the request; it has no HTTP dependency.
 - **Roles** are looked up in authz's own `authz_user_roles` table. They
   are never read from claims. Even for IdPs you control. Federated
   IdPs (Google, GitHub, ...) are treated identically to your own.
@@ -77,12 +77,14 @@ if err := authz.MigratePostgres(ctx, db); err != nil {
 store := authz.NewPostgresStore(db)
 
 resolver := &authz.Resolver{
-    Source: oidc,           // anything implementing IdentitySource
     Store:  store,
     Module: "faq",          // "" if this resolver checks global roles
 }
 
-principal, err := resolver.Resolve(ctx, req)
+// The host turns the request into an identity (anonymous requests are
+// handled before this point), then asks authz for that identity's roles.
+id := authz.Identity{Issuer: iss, Subject: sub, DisplayName: name, Email: email}
+principal, err := resolver.Resolve(ctx, id)
 ```
 
 `principal.Roles` carries both global roles (`module = ''`) and roles

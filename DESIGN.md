@@ -167,41 +167,38 @@ temp file, PostgreSQL on testcontainers).
 ## 6. The Resolver
 
 ```go
-// IdentitySource extracts an authenticated identity from an HTTP
-// request. Implementations include an oidclient adapter (cookie/JWT),
-// an mTLS adapter (client cert), or anything else that can produce
-// (issuer, subject, email, name) from the request.
-type IdentitySource interface {
-    // Identify returns the authenticated subject for r. Returns
-    // (nil, nil) for anonymous, (nil, err) for present-but-invalid
-    // credentials (the host should produce 401, not 500).
-    Identify(r *http.Request) (*Identity, error)
-}
-
 type Identity struct {
     Issuer, Subject string
     DisplayName, Email string
 }
 
 type Resolver struct {
-    Source IdentitySource
     Store  Store
     Module string  // "" for a global checker; "faq" for the faq mount, etc.
 }
 
-func (r *Resolver) Resolve(ctx context.Context, req *http.Request) (*Principal, error)
+func (r *Resolver) Resolve(ctx context.Context, id Identity) (*Principal, error)
 ```
 
-The Resolver depends only on `IdentitySource` — an interface defined
-in authz itself. authz does not import `oidclient` or any other
-specific auth-N package. A trivial adapter in the host wires
-oidclient's `*Client` into the interface; the same pattern works for
-mTLS or API-key auth.
+authz has **no knowledge of HTTP**. It does not extract identity from a
+request, validate tokens, or import `net/http`, `oidclient`, or any
+auth-N package. The host owns authentication: it validates the request,
+constructs an `Identity` value, and hands it to `Resolve`. Anonymous
+requests never reach `Resolve` — the host short-circuits them before
+asking about roles.
 
-The interface is named `IdentitySource` rather than `CookieValidator`
-deliberately: the contract is "produce an identity from a request,"
-not "validate a cookie." Naming it after the typical implementation
-would mislead non-cookie consumers and require renaming after v1.0.
+This is a deliberate boundary. Earlier drafts had authz own an
+`IdentitySource interface { Identify(*http.Request) }`, which pulled
+`net/http` into the package and put request handling on the wrong side
+of the auth-N/auth-Z line. Taking a resolved `Identity` value instead
+keeps authz a pure authorization library: identity in, roles out, no
+I/O. (It also keeps request-derived data from flowing into the SQL layer
+within this module, which a SQL taint analyzer would otherwise flag even
+though every query is parameterized — see §5.)
+
+The request → `Identity` step lives in the host (or a per-module
+adapter such as faq's `faqauthz`): a few lines mapping a validated
+session to `(issuer, subject, email, name)`.
 
 ## 7. JIT, trust policies, and what they're not
 

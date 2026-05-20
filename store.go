@@ -3,9 +3,9 @@
 // It provides a role store keyed on (issuer, subject, module, role) and a
 // resolver that maps an authenticated identity into the roles granted to
 // it. authz is deliberately decoupled from authentication: roles are never
-// read from JWT claims, federated or otherwise. Identity arrives through
-// the [IdentitySource] interface, which the host implements over whatever
-// auth-N mechanism it already runs.
+// read from JWT claims, and the package has no knowledge of HTTP. The host
+// validates each request and constructs an [Identity]; authz answers what
+// that identity may do.
 //
 // See DESIGN.md at the repository root for the full rationale.
 package authz
