@@ -131,6 +131,7 @@ func NewPostgresStore(db *sql.DB) Store { return &dbStore{db: db, d: pgDialect} 
 func NewSQLiteStore(db *sql.DB) Store { return &dbStore{db: db, d: sqliteDialect} }
 
 func (s *dbStore) Roles(ctx context.Context, issuer, subject, module string) ([]string, error) {
+	//nolint:gosec // s.d.roles is a constant dialect string; values pass as query parameters.
 	rows, err := s.db.QueryContext(ctx, s.d.roles, issuer, subject, module)
 	if err != nil {
 		return nil, fmt.Errorf("authz: query roles: %w", err)
@@ -158,6 +159,7 @@ func (s *dbStore) Grant(ctx context.Context, g Grant) error {
 	if g.GrantedBy == "" {
 		return fmt.Errorf("authz: grant: empty granted_by")
 	}
+	//nolint:gosec // s.d.grant is a constant dialect string; values pass as query parameters.
 	if _, err := s.db.ExecContext(ctx, s.d.grant,
 		g.Issuer, g.Subject, g.Module, g.Role, g.GrantedBy); err != nil {
 		return fmt.Errorf("authz: grant: %w", err)
@@ -166,6 +168,7 @@ func (s *dbStore) Grant(ctx context.Context, g Grant) error {
 }
 
 func (s *dbStore) Revoke(ctx context.Context, issuer, subject, module, role string) error {
+	//nolint:gosec // s.d.revoke is a constant dialect string; values pass as query parameters.
 	if _, err := s.db.ExecContext(ctx, s.d.revoke, issuer, subject, module, role); err != nil {
 		return fmt.Errorf("authz: revoke: %w", err)
 	}
@@ -173,6 +176,7 @@ func (s *dbStore) Revoke(ctx context.Context, issuer, subject, module, role stri
 }
 
 func (s *dbStore) Holders(ctx context.Context, role string) ([]Holding, bool, error) {
+	//nolint:gosec // s.d.holders is a constant dialect string; values pass as query parameters.
 	rows, err := s.db.QueryContext(ctx, s.d.holders, role, holdersLimit+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("authz: query holders: %w", err)
