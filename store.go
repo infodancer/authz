@@ -154,6 +154,19 @@ func (s *dbStore) Roles(ctx context.Context, issuer, subject, module string) ([]
 }
 
 func (s *dbStore) Grant(ctx context.Context, g Grant) error {
+	// Reject empty key fields: a grant with an empty issuer or subject is
+	// always a bug, and a stored empty-subject row could later match an
+	// empty-subject lookup and hand privileges to "nobody". (Module may be
+	// empty — that's a deliberate global grant.) Values are not trimmed or
+	// normalized: issuer and subject are opaque identifiers compared
+	// byte-for-byte against what the IdP issues, so mutating them here
+	// would risk a grant that never matches a lookup.
+	if g.Issuer == "" {
+		return fmt.Errorf("authz: grant: empty issuer")
+	}
+	if g.Subject == "" {
+		return fmt.Errorf("authz: grant: empty subject")
+	}
 	if g.Role == "" {
 		return fmt.Errorf("authz: grant: empty role")
 	}

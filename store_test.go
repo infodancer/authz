@@ -239,11 +239,21 @@ func TestHolders(t *testing.T) {
 func TestGrantValidation(t *testing.T) {
 	eachBackend(t, func(t *testing.T, st Store) {
 		ctx := context.Background()
-		if err := st.Grant(ctx, Grant{Issuer: "iss", Subject: "alice", Role: "", GrantedBy: "cli:test"}); err == nil {
-			t.Error("grant with empty role should error")
+		cases := map[string]Grant{
+			"empty issuer":     {Issuer: "", Subject: "alice", Role: "admin", GrantedBy: "cli:test"},
+			"empty subject":    {Issuer: "iss", Subject: "", Role: "admin", GrantedBy: "cli:test"},
+			"empty role":       {Issuer: "iss", Subject: "alice", Role: "", GrantedBy: "cli:test"},
+			"empty granted_by": {Issuer: "iss", Subject: "alice", Role: "admin", GrantedBy: ""},
 		}
-		if err := st.Grant(ctx, Grant{Issuer: "iss", Subject: "alice", Role: "admin", GrantedBy: ""}); err == nil {
-			t.Error("grant with empty granted_by should error")
+		for name, g := range cases {
+			if err := st.Grant(ctx, g); err == nil {
+				t.Errorf("grant with %s should error", name)
+			}
+		}
+
+		// An empty module is valid — it's a global grant.
+		if err := st.Grant(ctx, Grant{Issuer: "iss", Subject: "alice", Module: "", Role: "admin", GrantedBy: "cli:test"}); err != nil {
+			t.Errorf("grant with empty module (global) should succeed, got %v", err)
 		}
 	})
 }

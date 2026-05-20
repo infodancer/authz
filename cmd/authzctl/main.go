@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/infodancer/authz"
@@ -80,6 +81,9 @@ func run(driver, dsn, cmd string, args []string) error {
 		if len(pos) != 3 {
 			return fmt.Errorf("grant: want ISSUER SUBJECT ROLE, got %d args", len(pos))
 		}
+		if err := rejectPadded("issuer", pos[0], "subject", pos[1], "role", pos[2], "module", *module); err != nil {
+			return err
+		}
 		g := authz.Grant{
 			Issuer: pos[0], Subject: pos[1], Module: *module,
 			Role: pos[2], GrantedBy: *by,
@@ -100,6 +104,9 @@ func run(driver, dsn, cmd string, args []string) error {
 		if len(pos) != 3 {
 			return fmt.Errorf("revoke: want ISSUER SUBJECT ROLE, got %d args", len(pos))
 		}
+		if err := rejectPadded("issuer", pos[0], "subject", pos[1], "role", pos[2], "module", *module); err != nil {
+			return err
+		}
 		if err := storeFor(driver, db).Revoke(ctx, pos[0], pos[1], *module, pos[2]); err != nil {
 			return err
 		}
@@ -115,6 +122,9 @@ func run(driver, dsn, cmd string, args []string) error {
 		}
 		if len(pos) != 2 {
 			return fmt.Errorf("roles: want ISSUER SUBJECT, got %d args", len(pos))
+		}
+		if err := rejectPadded("issuer", pos[0], "subject", pos[1], "module", *module); err != nil {
+			return err
 		}
 		roles, err := storeFor(driver, db).Roles(ctx, pos[0], pos[1], *module)
 		if err != nil {
@@ -133,6 +143,9 @@ func run(driver, dsn, cmd string, args []string) error {
 		}
 		if len(pos) != 1 {
 			return fmt.Errorf("holders: want ROLE, got %d args", len(pos))
+		}
+		if err := rejectPadded("role", pos[0]); err != nil {
+			return err
 		}
 		holdings, capped, err := storeFor(driver, db).Holders(ctx, pos[0])
 		if err != nil {
@@ -176,6 +189,21 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 		pos = append(pos, rest[0])
 		args = rest[1:]
 	}
+}
+
+// rejectPadded errors if any value has leading or trailing whitespace.
+// authzctl is the one place issuer/subject/role/module are entered by a
+// human (often pasted), and a stray space or newline would store a key
+// that never byte-matches the value an IdP issues at lookup time — a
+// grant that silently does nothing. Args come in name, value pairs.
+func rejectPadded(pairs ...string) error {
+	for i := 0; i+1 < len(pairs); i += 2 {
+		name, v := pairs[i], pairs[i+1]
+		if strings.TrimSpace(v) != v {
+			return fmt.Errorf("%s %q has leading or trailing whitespace", name, v)
+		}
+	}
+	return nil
 }
 
 func open(driver, dsn string) (*sql.DB, error) {
