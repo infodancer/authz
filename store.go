@@ -73,66 +73,67 @@ type Store interface {
 	Holders(ctx context.Context, role string) (holdings []Holding, capped bool, err error)
 }
 
-// dialect carries the per-backend SQL. The two backends differ only in
-// placeholder syntax ($1 vs ?); the statements are otherwise identical.
-type dialect struct {
-	roles   string
-	grant   string
-	revoke  string
-	holders string
-}
-
-var pgDialect = dialect{
-	roles: `SELECT DISTINCT role FROM authz_user_roles
+// Per-backend SQL. The two backends differ only in placeholder syntax
+// ($1 vs ?); the statements are otherwise identical. These are compile-
+// time constants, passed directly to Query/Exec, so the static analyzer
+// can confirm the query text is never attacker-influenced — every value
+// reaches the database as a bound parameter, never interpolated.
+const (
+	pgRolesSQL = `SELECT DISTINCT role FROM authz_user_roles
 		WHERE issuer = $1 AND subject = $2 AND module IN ('', $3)
-		ORDER BY role`,
-	grant: `INSERT INTO authz_user_roles (issuer, subject, module, role, granted_by)
+		ORDER BY role`
+	pgGrantSQL = `INSERT INTO authz_user_roles (issuer, subject, module, role, granted_by)
 		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (issuer, subject, module, role) DO NOTHING`,
-	revoke: `DELETE FROM authz_user_roles
-		WHERE issuer = $1 AND subject = $2 AND module = $3 AND role = $4`,
-	holders: `SELECT issuer, subject, module, role, granted_at, granted_by
+		ON CONFLICT (issuer, subject, module, role) DO NOTHING`
+	pgRevokeSQL = `DELETE FROM authz_user_roles
+		WHERE issuer = $1 AND subject = $2 AND module = $3 AND role = $4`
+	pgHoldersSQL = `SELECT issuer, subject, module, role, granted_at, granted_by
 		FROM authz_user_roles
 		WHERE role = $1
 		ORDER BY issuer, subject, module
-		LIMIT $2`,
-}
+		LIMIT $2`
 
-var sqliteDialect = dialect{
-	roles: `SELECT DISTINCT role FROM authz_user_roles
+	sqliteRolesSQL = `SELECT DISTINCT role FROM authz_user_roles
 		WHERE issuer = ? AND subject = ? AND module IN ('', ?)
-		ORDER BY role`,
-	grant: `INSERT INTO authz_user_roles (issuer, subject, module, role, granted_by)
+		ORDER BY role`
+	sqliteGrantSQL = `INSERT INTO authz_user_roles (issuer, subject, module, role, granted_by)
 		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (issuer, subject, module, role) DO NOTHING`,
-	revoke: `DELETE FROM authz_user_roles
-		WHERE issuer = ? AND subject = ? AND module = ? AND role = ?`,
-	holders: `SELECT issuer, subject, module, role, granted_at, granted_by
+		ON CONFLICT (issuer, subject, module, role) DO NOTHING`
+	sqliteRevokeSQL = `DELETE FROM authz_user_roles
+		WHERE issuer = ? AND subject = ? AND module = ? AND role = ?`
+	sqliteHoldersSQL = `SELECT issuer, subject, module, role, granted_at, granted_by
 		FROM authz_user_roles
 		WHERE role = ?
 		ORDER BY issuer, subject, module
-		LIMIT ?`,
-}
+		LIMIT ?`
+)
 
 type dbStore struct {
-	db *sql.DB
-	d  dialect
+	db     *sql.DB
+	sqlite bool
 }
 
 // NewPostgresStore returns a [Store] backed by a PostgreSQL database. The
 // caller opens db with a PostgreSQL driver (typically the pgx stdlib
 // driver) and owns its lifecycle. A pgxpool-based host can adapt its pool
 // with stdlib.OpenDBFromPool.
-func NewPostgresStore(db *sql.DB) Store { return &dbStore{db: db, d: pgDialect} }
+func NewPostgresStore(db *sql.DB) Store { return &dbStore{db: db} }
 
 // NewSQLiteStore returns a [Store] backed by a SQLite database. The caller
 // opens db with a SQLite driver (typically modernc.org/sqlite) and owns
 // its lifecycle.
-func NewSQLiteStore(db *sql.DB) Store { return &dbStore{db: db, d: sqliteDialect} }
+func NewSQLiteStore(db *sql.DB) Store { return &dbStore{db: db, sqlite: true} }
 
 func (s *dbStore) Roles(ctx context.Context, issuer, subject, module string) ([]string, error) {
-	//nolint:gosec // s.d.roles is a constant dialect string; values pass as query parameters.
-	rows, err := s.db.QueryContext(ctx, s.d.roles, issuer, subject, module)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if s.sqlite {
+		rows, err = s.db.QueryContext(ctx, sqliteRolesSQL, issuer, subject, module)
+	} else {
+		rows, err = s.db.QueryContext(ctx, pgRolesSQL, issuer, subject, module)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("authz: query roles: %w", err)
 	}
@@ -159,25 +160,41 @@ func (s *dbStore) Grant(ctx context.Context, g Grant) error {
 	if g.GrantedBy == "" {
 		return fmt.Errorf("authz: grant: empty granted_by")
 	}
-	//nolint:gosec // s.d.grant is a constant dialect string; values pass as query parameters.
-	if _, err := s.db.ExecContext(ctx, s.d.grant,
-		g.Issuer, g.Subject, g.Module, g.Role, g.GrantedBy); err != nil {
+	var err error
+	if s.sqlite {
+		_, err = s.db.ExecContext(ctx, sqliteGrantSQL, g.Issuer, g.Subject, g.Module, g.Role, g.GrantedBy)
+	} else {
+		_, err = s.db.ExecContext(ctx, pgGrantSQL, g.Issuer, g.Subject, g.Module, g.Role, g.GrantedBy)
+	}
+	if err != nil {
 		return fmt.Errorf("authz: grant: %w", err)
 	}
 	return nil
 }
 
 func (s *dbStore) Revoke(ctx context.Context, issuer, subject, module, role string) error {
-	//nolint:gosec // s.d.revoke is a constant dialect string; values pass as query parameters.
-	if _, err := s.db.ExecContext(ctx, s.d.revoke, issuer, subject, module, role); err != nil {
+	var err error
+	if s.sqlite {
+		_, err = s.db.ExecContext(ctx, sqliteRevokeSQL, issuer, subject, module, role)
+	} else {
+		_, err = s.db.ExecContext(ctx, pgRevokeSQL, issuer, subject, module, role)
+	}
+	if err != nil {
 		return fmt.Errorf("authz: revoke: %w", err)
 	}
 	return nil
 }
 
 func (s *dbStore) Holders(ctx context.Context, role string) ([]Holding, bool, error) {
-	//nolint:gosec // s.d.holders is a constant dialect string; values pass as query parameters.
-	rows, err := s.db.QueryContext(ctx, s.d.holders, role, holdersLimit+1)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if s.sqlite {
+		rows, err = s.db.QueryContext(ctx, sqliteHoldersSQL, role, holdersLimit+1)
+	} else {
+		rows, err = s.db.QueryContext(ctx, pgHoldersSQL, role, holdersLimit+1)
+	}
 	if err != nil {
 		return nil, false, fmt.Errorf("authz: query holders: %w", err)
 	}
