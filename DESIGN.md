@@ -170,6 +170,7 @@ temp file, PostgreSQL on testcontainers).
 type Identity struct {
     Issuer, Subject string
     DisplayName, Email string
+    EmailVerified bool
 }
 
 type Resolver struct {
@@ -199,6 +200,15 @@ though every query is parameterized — see §5.)
 The request → `Identity` step lives in the host (or a per-module
 adapter such as faq's `faqauthz`): a few lines mapping a validated
 session to `(issuer, subject, email, name)`.
+
+`EmailVerified` is an identity-assurance fact, not a role. It reports
+whether the auth-N layer confirmed control of the email address — either
+the IdP's standard OIDC `email_verified` claim, or a verification flow
+the host ran itself. authz never sets or stores it; the host populates it
+when constructing the `Identity`, and `Resolve` threads it onto the
+`Principal` so a caller can gate on it alongside roles. Modeling it as a
+role would be a category error: nobody *grants* email-verification, so it
+has no `granted_by`, and listing its `Holders` would be meaningless.
 
 ## 7. JIT, trust policies, and what they're not
 

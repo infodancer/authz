@@ -6,7 +6,7 @@ import (
 )
 
 func aliceID() Identity {
-	return Identity{Issuer: "iss", Subject: "alice", DisplayName: "Alice", Email: "a@example.com"}
+	return Identity{Issuer: "iss", Subject: "alice", DisplayName: "Alice", Email: "a@example.com", EmailVerified: true}
 }
 
 func TestResolveNoRoles(t *testing.T) {
@@ -20,6 +20,9 @@ func TestResolveNoRoles(t *testing.T) {
 	}
 	if p.Subject != "alice" || p.DisplayName != "Alice" || p.Email != "a@example.com" {
 		t.Errorf("identity fields not threaded: %+v", p)
+	}
+	if !p.EmailVerified {
+		t.Error("EmailVerified not threaded from Identity to Principal")
 	}
 	if len(p.Roles) != 0 {
 		t.Errorf("roles = %v, want empty", p.Roles)

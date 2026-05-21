@@ -15,21 +15,29 @@ import (
 // authz does not extract Identity from a request — it has no knowledge of
 // HTTP. The host validates the request and constructs the Identity, then
 // asks authz what that identity may do.
+//
+// EmailVerified is an identity-assurance fact, not a role: it reports
+// whether the auth-N layer (the IdP's email_verified claim, or a
+// verification flow the host ran itself) has confirmed control of Email.
+// authz never sets or stores it — the host supplies it and authz carries
+// it through so callers can gate on it alongside roles.
 type Identity struct {
-	Issuer      string
-	Subject     string
-	DisplayName string
-	Email       string
+	Issuer        string
+	Subject       string
+	DisplayName   string
+	Email         string
+	EmailVerified bool
 }
 
 // Principal is an authenticated identity together with the roles granted
 // to it, scoped to the resolver's module.
 type Principal struct {
-	Issuer      string
-	Subject     string
-	DisplayName string
-	Email       string
-	Roles       []string
+	Issuer        string
+	Subject       string
+	DisplayName   string
+	Email         string
+	EmailVerified bool
+	Roles         []string
 }
 
 // HasRole reports whether the principal holds role.
@@ -60,10 +68,11 @@ func (r *Resolver) Resolve(ctx context.Context, id Identity) (*Principal, error)
 		return nil, fmt.Errorf("authz: resolve roles: %w", err)
 	}
 	return &Principal{
-		Issuer:      id.Issuer,
-		Subject:     id.Subject,
-		DisplayName: id.DisplayName,
-		Email:       id.Email,
-		Roles:       roles,
+		Issuer:        id.Issuer,
+		Subject:       id.Subject,
+		DisplayName:   id.DisplayName,
+		Email:         id.Email,
+		EmailVerified: id.EmailVerified,
+		Roles:         roles,
 	}, nil
 }
