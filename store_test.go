@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/infodancer/authz/migrate"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -36,7 +37,7 @@ func newSQLiteTestStore(t *testing.T) Store {
 	}
 	db.SetMaxOpenConns(1) // SQLite is single-writer.
 	t.Cleanup(func() { _ = db.Close() })
-	if err := MigrateSQLite(context.Background(), db); err != nil {
+	if err := migrate.SQLite(context.Background(), db); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return NewSQLiteStore(db)
@@ -68,7 +69,7 @@ func newPostgresTestStore(t *testing.T) Store {
 		t.Fatalf("open pgx: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if err := MigratePostgres(ctx, db); err != nil {
+	if err := migrate.Postgres(ctx, db); err != nil {
 		t.Fatalf("migrate postgres: %v", err)
 	}
 	return NewPostgresStore(db)

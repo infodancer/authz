@@ -62,16 +62,21 @@ CREATE INDEX authz_user_roles_lookup_idx ON authz_user_roles (issuer, subject);
 
 Migrations ship in `migrations/{postgres,sqlite}/` and run via the
 module's own goose tree (table `authz_goose_db_version`) so they don't
-collide with the host application's migration history.
+collide with the host application's migration history. They are applied
+through the separate `authz/migrate` package — import it only if you want
+authz to manage its own schema; the root package stays free of goose.
 
 ## Use
 
 ```go
-import "github.com/infodancer/authz"
+import (
+    "github.com/infodancer/authz"
+    "github.com/infodancer/authz/migrate"
+)
 
 // db is a *sql.DB opened with any PostgreSQL driver. A pgxpool host
 // can wrap its pool with stdlib.OpenDBFromPool(pool).
-if err := authz.MigratePostgres(ctx, db); err != nil {
+if err := migrate.Postgres(ctx, db); err != nil {
     return err
 }
 store := authz.NewPostgresStore(db)
@@ -86,6 +91,11 @@ resolver := &authz.Resolver{
 id := authz.Identity{Issuer: iss, Subject: sub, DisplayName: name, Email: email}
 principal, err := resolver.Resolve(ctx, id)
 ```
+
+Consumers that run their own migration tooling can skip `authz/migrate`
+entirely and apply the SQL under `migrations/` themselves; importing only
+`github.com/infodancer/authz` keeps the dependency footprint to the
+standard library plus a database driver.
 
 `principal.Roles` carries both global roles (`module = ''`) and roles
 granted with `module = "faq"`, deduped. `principal.HasRole("admin")`

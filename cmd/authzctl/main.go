@@ -26,6 +26,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/infodancer/authz"
+	"github.com/infodancer/authz/migrate"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
@@ -226,9 +227,9 @@ func storeFor(driver string, db *sql.DB) authz.Store {
 
 func migrateFor(ctx context.Context, driver string, db *sql.DB) error {
 	if driver == "sqlite" {
-		return authz.MigrateSQLite(ctx, db)
+		return migrate.SQLite(ctx, db)
 	}
-	return authz.MigratePostgres(ctx, db)
+	return migrate.Postgres(ctx, db)
 }
 
 func defaultBy() string {

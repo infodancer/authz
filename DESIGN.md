@@ -264,18 +264,26 @@ runs them via goose with table name `authz_goose_db_version`. Distinct
 from the host application's `goose_db_version` so the two trees don't
 shadow each other when sharing a database.
 
-```go
-// MigratePostgres applies all pending authz migrations against db.
-// Safe to call repeatedly.
-func MigratePostgres(ctx context.Context, db *sql.DB) error
+The helpers live in a separate `authz/migrate` package, not the root, so
+that goose is pulled in only by consumers that opt into authz-managed
+migrations. The root package — `Store`, `Resolver`, and the identity
+types — depends on nothing beyond the standard library, leaving the
+database driver as the host's only added dependency for pure-`Store` use.
 
-// MigrateSQLite is the SQLite analogue. The host must have opened
+```go
+// migrate.Postgres applies all pending authz migrations against db.
+// Safe to call repeatedly.
+func Postgres(ctx context.Context, db *sql.DB) error
+
+// migrate.SQLite is the SQLite analogue. The host must have opened
 // the connection with `?_pragma=foreign_keys(1)` or equivalent.
-func MigrateSQLite(ctx context.Context, db *sql.DB) error
+func SQLite(ctx context.Context, db *sql.DB) error
 ```
 
 Consumer migration timing is the consumer's call. faq runs its own
-`AutoMigrate` on startup; authz expects the same pattern.
+`AutoMigrate` on startup; authz expects the same pattern. A host that
+prefers its own migration tooling can ignore `authz/migrate` and apply
+the embedded SQL directly.
 
 ## 10. Consuming the module
 
